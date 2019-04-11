@@ -111,7 +111,7 @@ class Sequence(Model):
             self.params['structure']['skips'] = {int(s): e for (s, e) in six.iteritems(arch_desc['skips'])}
 
 
-    def forward_no_perm(self, x):
+    def forward(self, x):
         skip_data = {}
         count = 0
 
@@ -131,4 +131,4 @@ class Sequence(Model):
 
             x = l(x)
 
-        return x.permute(0, 2, 3, 1)
+        return x
