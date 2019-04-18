@@ -1,11 +1,13 @@
 import sys
+import os
+
 import torch
 from torch import nn
 
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
-        self.best_val = sys.maxisize
+        self.best_val = sys.maxsize
         self.name = "default"
 
     def forward(self, x):
@@ -20,6 +22,8 @@ class Model(nn.Module):
         torch.save({'model': self}, path)
 
     def get_all_params(self):
-        return [self.parameters()]
+        result = []
+        result.extend(self.parameters())
+        return result
 
 

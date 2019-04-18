@@ -5,8 +5,8 @@ import torch
 import six
 import os
 
-from model import Model
-from tools import dict_to_str
+from .model import Model
+from .tools import dict_to_str
 
 class Sequence(Model):
     def initc(self, m, mult):
@@ -18,8 +18,8 @@ class Sequence(Model):
 
     def __init__(self, arch_desc):
         super().__init__()
-        self.name = dist_to_str(arch_desc)
-        self.params = parse_arch_desc(self, arch_desc)
+        self.name = dict_to_str(arch_desc)
+        self.params = self.parse_arch_desc(arch_desc)
         self.construct_layers(self.params)
 
     def parse_arch_desc(self, arch_desc):
@@ -47,8 +47,9 @@ class Sequence(Model):
         self.parse_act_params(params, arch_desc)
         self.parse_structure_params(params, arch_desc)
         self.parse_flag_params(params, arch_desc)
+        return params
 
-    def construct_layters(self, params):
+    def construct_layers(self, params):
         fms = params['structure']['fms']
         skips = params['structure']['skips']
 
@@ -63,17 +64,16 @@ class Sequence(Model):
             self.layers.append(torch.nn.InstanceNorm2d(num_features=fms[0]))
 
         for i in range(len(fms) - 1):
-            self.layers.append(nn.Conv2d(fms[i], fms[i + 1], k, padding=p))
+            self.layers.append(nn.Conv2d(fms[i], fms[i + 1], k, padding=pad))
             self.initc(self.layers[-1], init_mult)
 
             if i != len(fms) - 2:
-                if self.params['flags']['use_batchnorm']:
+                if params['flags']['use_batchnorm']:
                     self.layers.append(nn.BatchNorm2d(fms[i + 1]))
-                if self.params['flags']['use_instancenorm']:
+                if params['flags']['use_instancenorm']:
                     self.layers.append(torch.nn.InstanceNorm2d(
                                                   num_features=fms[i + 1]))
                 self.layers.append(act_constructor())
-
         self.seq = nn.Sequential(*self.layers)
 
     def parse_conv_params(self, params, arch_desc):
@@ -82,6 +82,9 @@ class Sequence(Model):
 
         if 'conv_init_mult' in arch_desc:
             params['conv']['init_mult'] = arch_desc['conv_init_mult']
+
+        if 'initc_mult' in arch_desc:
+            params['conv']['init_mult'] = arch_desc['initc_mult']
 
     def parse_act_params(self, params, arch_desc):
         if 'act' in arch_desc:
@@ -95,7 +98,7 @@ class Sequence(Model):
             else:
                 raise Exception("Unrecognized Activation")
 
-    def parse_flags_params(self, params, arch_desc):
+    def parse_flag_params(self, params, arch_desc):
         if 'flags' in arch_desc and 'batchnorm' in arch_desc['flags']:
             params['flags']['use_batchnorm'] = True
 
@@ -108,12 +111,16 @@ class Sequence(Model):
     def parse_structure_params(self, params, arch_desc):
         params['structure']['fms'] = arch_desc['fms']
         if 'skips' in arch_desc:
-            self.params['structure']['skips'] = {int(s): e for (s, e) in six.iteritems(arch_desc['skips'])}
+            params['structure']['skips'] = {
+                    int(s): e for (s, e) in six.iteritems(arch_desc['skips'])
+            }
 
 
     def forward(self, x):
+        #return self.seq(x)
         skip_data = {}
         count = 0
+        skips = self.params['structure']['skips']
 
         for l in self.layers:
             if isinstance(l, torch.nn.modules.conv.Conv2d):
@@ -124,11 +131,10 @@ class Sequence(Model):
                     #print (torch.mean(torch.abs(skip_data[count])), torch.var(skip_data[count]))
                     x += skip_data[count]
 
-            if isinstance(l, self.params['act_f']):
-                if count in self.params['skips'] or str(count) in self.params['skips']:
+            if isinstance(l, self.params['act']['constructor']):
+                if count in skips or str(count) in skips:
                     #print ('Saving {} to the skip bank'.format(torch.mean(x)))
-                    skip_data[self.params['skips'][count]] = x
+                    skip_data[skips[count]] = x
 
             x = l(x)
-
         return x
