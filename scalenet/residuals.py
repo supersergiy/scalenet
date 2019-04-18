@@ -1,4 +1,3 @@
-from helpers import gridsample_residual
 import torch
 
 def res_warp_res(res_a, res_b, is_pix_res=True):
@@ -54,3 +53,20 @@ def upsample_residuals(residuals):
     result *= 2
     return result
 
+def gridsampler(source, field, padding_mode):
+    if source.shape[2] != source.shape[3]:
+        raise NotImplementedError('Grid sample is not impolemented for non-square tensors.')
+    scaled_field = field * source.shape[2] / (source.shape[2] - 1)
+    return torch.nn.functional.grid_sample(source, scaled_field, mode="bilitear",
+                                            padding_mode=padding_mode)
+
+def get_identity_grid(size):
+    with torch.no_grad():
+        id_theta = torch.cuda.FloatTensor([[[1,0,0],[0,1,0]]]) # identity affine transform
+        I = F.affine_grid(id_theta,torch.Size((1,1,size,size)))
+        I *= (size - 1) / size # rescale the identity provided by PyTorch
+        return I
+
+def gridsample_residual(source, res, padding_mode):
+    field = res + get_identity_grid(size)
+    return gridsample(source, field, padding_mode)
