@@ -32,8 +32,8 @@ class ScaleNet(Model):
             self.level_combiners[str(i)] = self.default_combiner()
 
     def forward(self, x, level_in):
-        up_result = self.up_path(x, level_in)
-        result = self.down_path(up_result)
+        state = self.up_path(x, level_in)
+        result = self.down_path(state)
         return result
 
 
@@ -43,42 +43,52 @@ class ScaleNet(Model):
         max_level = max([int(i) for i in all_module_levels])
 
         for level in range(level_in, max_level + 1):
-            result[str(level)] = {}
-            result[str(level)]['input'] = x
+            level_state = {}
+            level_state['input'] = x
             if str(level) in self.level_upmodules:
-                x = self.level_upmodules[str(level)](x)
+                x = self.level_upmodules[str(level)](x, state, level)
 
-            result[str(level)]['output'] = x
+            level_state['output'] = x
 
             skip = self.level_skiplinks[str(level)](x)
-            result[str(level)]['skip'] = skip
+            level_state['skip'] = skip
 
             x = self.level_uplinks[str(level)](x)
-            result[str(level)]['uplink'] = x
+            level_state['uplink'] = x
+            state['up'][str(level)] = level_state
 
-        return result
+        return state
 
-    def down_path(self, up_result):
+    def down_path(self, state):
         prev_out = None
         max_level = max([int(i) for i in up_result.keys()])
         min_level = min([int(i) for i in up_result.keys()])
 
         for level in reversed(range(min_level, max_level + 1)):
+            level_state = {}
             skip = up_result[str(level)]['skip']
+
             if prev_out is None:
-                prev_out = torch.zeros_like(skip, device=skip.get_device())
-            if str(level) in self.level_downmodules:
-                downmodule_in = self.level_combiners[str(level)](skip, prev_out, level, up_result)
-                out = self.level_downmodules[str(level)](downmodule_in)
+                level_in = torch.zeros_like(skip, device=skip.get_device())
             else:
-                out = prev_out
+                downlink = self.level_downlinks[str(level)]
+                prev_out = state['down'][str(level + 1)]['output']
+                level_in = downlink(prev_out)
 
-            prev_out = out
+            level_state[str(level)]['input'] = level_in
 
-            if level != min_level:
-                prev_out = self.level_downlinks[str(level)](out)
+            if str(level) in self.level_downmodules:
+                downmodule_in = self.level_combiners[str(level)](skip, level_in, state, level)
+                level_out = self.level_downmodules[str(level)](downmodule_in, state, level)
+            else:
+                level_out = level_in
 
-        return prev_out
+            level_state[str(level)]['output'] = level_out
+
+            state['down'][str(level)] = level_state
+
+        result = state['down'][str(min_level)]['output']
+        return result
 
     ############# Defaults ###############
 
