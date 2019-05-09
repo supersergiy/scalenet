@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import six
 import os
+import random
 
 from .model import Model
 from .tools import dict_to_str
@@ -116,12 +117,11 @@ class Sequence(Model):
             }
 
 
-    def forward(self, x):
+    def forward(self, x, *kargs, **kwargs):
         #return self.seq(x)
         skip_data = {}
         count = 0
         skips = self.params['structure']['skips']
-
         for l in self.layers:
             if isinstance(l, torch.nn.modules.conv.Conv2d):
                 count += 1
@@ -135,6 +135,5 @@ class Sequence(Model):
                 if count in skips or str(count) in skips:
                     #print ('Saving {} to the skip bank'.format(torch.mean(x)))
                     skip_data[skips[count]] = x
-
             x = l(x)
         return x

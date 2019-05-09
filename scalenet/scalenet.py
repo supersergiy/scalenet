@@ -32,19 +32,21 @@ class ScaleNet(Model):
             self.level_combiners[str(i)] = self.default_combiner()
 
     def forward(self, x, level_in):
-        state = self.up_path(x, level_in)
+        state = {}
+        state = self.up_path(x, level_in, state)
         result = self.down_path(state)
         return result
 
 
-    def up_path(self, x, level_in):
-        result = {}
+    def up_path(self, x, level_in, state):
+        state['up'] = {}
         all_module_levels = list(self.level_upmodules.keys()) + list(self.level_downmodules.keys())
         max_level = max([int(i) for i in all_module_levels])
-
         for level in range(level_in, max_level + 1):
             level_state = {}
+            state['up'][str(level)] = level_state
             level_state['input'] = x
+
             if str(level) in self.level_upmodules:
                 x = self.level_upmodules[str(level)](x, state, level)
 
@@ -55,27 +57,28 @@ class ScaleNet(Model):
 
             x = self.level_uplinks[str(level)](x)
             level_state['uplink'] = x
-            state['up'][str(level)] = level_state
 
         return state
 
     def down_path(self, state):
+        state['down'] = {}
         prev_out = None
-        max_level = max([int(i) for i in up_result.keys()])
-        min_level = min([int(i) for i in up_result.keys()])
+        max_level = max([int(i) for i in state['up'].keys()])
+        min_level = min([int(i) for i in state['up'].keys()])
 
         for level in reversed(range(min_level, max_level + 1)):
             level_state = {}
-            skip = up_result[str(level)]['skip']
+            state['down'][str(level)] = level_state
+
+            skip = state['up'][str(level)]['skip']
 
             if prev_out is None:
-                level_in = torch.zeros_like(skip, device=skip.get_device())
+                level_in = torch.zeros_like(skip, device='cuda')
             else:
                 downlink = self.level_downlinks[str(level)]
-                prev_out = state['down'][str(level + 1)]['output']
                 level_in = downlink(prev_out)
 
-            level_state[str(level)]['input'] = level_in
+            level_state['input'] = level_in
 
             if str(level) in self.level_downmodules:
                 downmodule_in = self.level_combiners[str(level)](skip, level_in, state, level)
@@ -83,9 +86,9 @@ class ScaleNet(Model):
             else:
                 level_out = level_in
 
-            level_state[str(level)]['output'] = level_out
+            level_state['output'] = level_out
+            prev_out = level_out
 
-            state['down'][str(level)] = level_state
 
         result = state['down'][str(min_level)]['output']
         return result
