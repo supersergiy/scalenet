@@ -8,10 +8,15 @@ import random
 
 from .model import Model
 from .tools import dict_to_str
+from .initialization import KyleInitializer
 
 class Sequence(Model):
-    def initc(self, m, mult):
-        m.weight.data *= mult
+    def initc(self, m, mult, kyleinit=False):
+        if kyleinit:
+           m = KyleInitializer(m, per_channel=True, init_bias=True)
+        else:
+            m.weight.data *= mult
+            m.bias.data[...] = 0
 
     def validate_arch_desc(self, arch_desc):
         #TODO
@@ -33,7 +38,8 @@ class Sequence(Model):
             },
             'conv': {
                 'k': 7,
-                'init_mult': np.sqrt(6)
+                'init_mult': np.sqrt(6),
+                'kyleinit': False
             },
             'act': {
                 'constructor': nn.LeakyReLU
@@ -55,6 +61,7 @@ class Sequence(Model):
         skips = params['structure']['skips']
 
         init_mult = params['conv']['init_mult']
+        kyleinit = params['conv']['kyleinit']
         k = params['conv']['k']
         pad = (k - 1) // 2
 
@@ -66,7 +73,7 @@ class Sequence(Model):
 
         for i in range(len(fms) - 1):
             self.layers.append(nn.Conv2d(fms[i], fms[i + 1], k, padding=pad))
-            self.initc(self.layers[-1], init_mult)
+            self.initc(self.layers[-1], init_mult, kyleinit=kyleinit)
 
             if i != len(fms) - 2:
                 if params['flags']['use_batchnorm']:
@@ -78,6 +85,9 @@ class Sequence(Model):
         self.seq = nn.Sequential(*self.layers)
 
     def parse_conv_params(self, params, arch_desc):
+        if 'kyleinit' in arch_desc:
+            params['conv']['kyleinit'] = arch_desc['kyleinit']
+
         if 'k' in arch_desc:
             params['conv']['k'] = arch_desc['k']
 

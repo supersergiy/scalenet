@@ -9,6 +9,7 @@ class Model(nn.Module):
         super().__init__()
         self.best_val = sys.maxsize
         self.name = "default"
+        self.params = {}
 
     def forward(self, x):
         return x

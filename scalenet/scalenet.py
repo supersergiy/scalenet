@@ -31,20 +31,31 @@ class ScaleNet(Model):
             self.level_skiplinks[str(i)] = self.default_skiplink()
             self.level_combiners[str(i)] = self.default_combiner()
 
-    def forward(self, x, level_in):
+    def forward(self, x, level_in=0, multimip_input=False):
         state = {}
-        state = self.up_path(x, level_in, state)
+        state = self.up_path(x, level_in, multimip_input, state)
         result = self.down_path(state)
+        self.state = state
         return result
 
 
-    def up_path(self, x, level_in, state):
+    def up_path(self, x_in, level_in, multimip_input, state):
         state['up'] = {}
         all_module_levels = list(self.level_upmodules.keys()) + list(self.level_downmodules.keys())
         max_level = max([int(i) for i in all_module_levels])
+
+        x = None
         for level in range(level_in, max_level + 1):
             level_state = {}
             state['up'][str(level)] = level_state
+
+            if multimip_input and level in x_in:
+                x = x_in[level]
+            elif x is None:
+                assert isinstance(x_in, torch.Tensor)
+                x = x_in
+
+
             level_state['input'] = x
 
             if str(level) in self.level_upmodules:
@@ -65,15 +76,14 @@ class ScaleNet(Model):
         prev_out = None
         max_level = max([int(i) for i in state['up'].keys()])
         min_level = min([int(i) for i in state['up'].keys()])
-
         for level in reversed(range(min_level, max_level + 1)):
             level_state = {}
             state['down'][str(level)] = level_state
 
             skip = state['up'][str(level)]['skip']
-
             if prev_out is None:
-                level_in = torch.zeros_like(skip, device='cuda')
+                level_in = torch.zeros((skip.shape[0], 2, skip.shape[-2], skip.shape[-1]),
+                        device=skip.device)
             else:
                 downlink = self.level_downlinks[str(level)]
                 level_in = downlink(prev_out)
@@ -83,6 +93,8 @@ class ScaleNet(Model):
             if str(level) in self.level_downmodules:
                 downmodule_in = self.level_combiners[str(level)](skip, level_in, state, level)
                 level_out = self.level_downmodules[str(level)](downmodule_in, state, level)
+                if 'debug' in self.params and self.params['debug']:
+                    print ("{}: {}".format(level, torch.mean(torch.abs(level_out))))
             else:
                 level_out = level_in
 
@@ -117,6 +129,8 @@ class ScaleNet(Model):
 
     def set_uplink(self, link, level):
         self.level_uplinks[str(level)] = link
+        if len(list(link.parameters())) > 0:
+            print ("Uplink mean weight [0] == {}".format(torch.mean(list(link.parameters())[0])))
 
     def set_downlink(self, link, level):
         self.level_downlinks[str(level)] = link
