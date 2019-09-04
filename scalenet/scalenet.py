@@ -35,7 +35,7 @@ class ScaleNet(Model):
         state = {}
         state = self.up_path(x, level_in, multimip_input, state)
         result = self.down_path(state)
-        self.state = state
+        #self.state = state
         return result
 
 
@@ -77,6 +77,7 @@ class ScaleNet(Model):
         max_level = max([int(i) for i in state['up'].keys()])
         min_level = min([int(i) for i in state['up'].keys()])
         for level in reversed(range(min_level, max_level + 1)):
+
             level_state = {}
             state['down'][str(level)] = level_state
 
@@ -91,7 +92,10 @@ class ScaleNet(Model):
             level_state['input'] = level_in
 
             if str(level) in self.level_downmodules:
-                downmodule_in = self.level_combiners[str(level)](skip, level_in, state, level)
+                if prev_out is None:
+                    downmodule_in = skip
+                else:
+                    downmodule_in = self.level_combiners[str(level)](skip, level_in, state, level)
                 level_out = self.level_downmodules[str(level)](downmodule_in, state, level)
                 if 'debug' in self.params and self.params['debug']:
                     print ("{}: {}".format(level, torch.mean(torch.abs(level_out))))
