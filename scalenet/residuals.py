@@ -1,50 +1,85 @@
+import copy
 import torch
 
-def res_warp_res(res_a, res_b, is_pix_res=True):
-    if is_pix_res:
-        res_b = 2 * res_b / (res_b.shape[-2])
+def upsample(x, is_res=False, is_pix_res=True):
+    if is_res:
+        x = x.permute(0, 3, 1, 2)
 
+    result = torch.nn.functional.interpolate(x, scale_factor=2)
+
+    if is_res:
+        result = result.permute(0, 2, 3, 1)
+
+    if is_res and is_pix_res:
+        result *= 2
+    return result
+
+def downsample(res, is_res=False, is_pix_res=True):
+    downsampler = torch.nn.AvgPool2d(2)
+    result = downsampler(res)
+    if is_res and is_pix_res:
+        result /= 2
+    return result
+
+
+def res_warp_res(res_a, res_b, is_pix_res=True, rollback=0):
     if len(res_a.shape) == 4:
-        result = gridsample_residual(
-                        res_a.permute(0, 3, 1, 2),
-                        res_b,
-                        padding_mode='border').permute(0, 2, 3, 1)
+        res_a_img = res_a.permute(0, 3, 1, 2)
     elif len(res_a.shape) == 3:
-        result = gridsample_residual(
-                        res_a.permute(2, 0, 1).unsqueeze(0),
-                        res_b.unsqueeze(0),
-                        padding_mode='border')[0].permute(1, 2, 0)
+        res_a_img = res_a.permute(2, 0, 1)
     else:
         raise Exception("Residual warping requires BxHxWx2 or HxWx2 format.")
+    result_perm = res_warp_img(res_a_img, res_b, is_pix_res, rollback)
+
+    if len(res_a.shape) == 4:
+        result = result_perm.permute(0, 2, 3, 1)
+    elif len(res_a.shape) == 3:
+        result = result_perm.permute(1, 2, 0)
 
     return result
 
 
-def res_warp_img(img, res_in, is_pix_res=True):
-
+def res_warp_img(img, res_in, is_pix_res=True, rollback=0):
     if is_pix_res:
         res = 2 * res_in / (img.shape[-1])
     else:
         res = res_in
+    original_shape = copy.deepcopy(img.shape)
 
     if len(img.shape) == 4:
-        result = gridsample_residual(img, res, padding_mode='zeros')
+        img_unsq = img
+        res_unsq = res
     elif len(img.shape) == 3:
-        result = gridsample_residual(img.unsqueeze(0),
-                                     res.unsqueeze(0), padding_mode='zeros')[0]
+        img_unsq = img.unsqueeze(0)
+        res_unsq = res.unsqueeze(0)
     elif len(img.shape) == 2:
-        result = gridsample_residual(img.unsqueeze(0).unsqueeze(0),
-                                     res.unsqueeze(0),
-                                     padding_mode='zeros')[0, 0]
+        img_unsq = img.unsqueeze(0).unsqueeze(0)
+        res_unsq = res.unsqueeze(0)
     else:
         raise Exception("Image warping requires BxCxHxW or CxHxW format." +
                         "Recieved dimensions: {}".format(len(img.shape)))
 
+    img_unsq_rollb = img_unsq
+    res_unsq_rollb = res_unsq
+    for i in range(rollback):
+        img_unsq_rollb = upsample(img_unsq_rollb)
+        res_unsq_rollb = upsample(res_unsq_rollb, is_res=True)
+    result_unsq_rollb = gridsample_residual(img_unsq_rollb, res_unsq_rollb, padding_mode='zeros')
+
+    result_unsq = result_unsq_rollb
+    for i in range(rollback):
+        result_unsq = downsample(result_unsq)
+
+    result = result_unsq
+    while len(result.shape) > len(original_shape):
+        result = result.squeeze(0)
+
     return result
 
 
-def combine_residuals(a, b, is_pix_res=True):
-    return b + res_warp_res(a, b, is_pix_res=is_pix_res)
+def combine_residuals(a, b, is_pix_res=True, rollback=0):
+    return res_warp_res(a, b, is_pix_res=is_pix_res, rollback=rollback) + b
+
 
 upsampler = torch.nn.UpsamplingBilinear2d(scale_factor=2)
 def upsample_residuals(residuals):

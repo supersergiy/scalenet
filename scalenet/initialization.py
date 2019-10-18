@@ -12,7 +12,7 @@ class _Initializer(nn.Module):
     super().__init__()
     self.module = module
     self.per_channel = per_channel
-    self.initializing = True
+    self.initializing = False #True
 
   def initialize(self, x):
     raise NotImplementedError
@@ -53,13 +53,14 @@ class _Initializer(nn.Module):
     else:
       return x.std().detach()
 
-class KyleInitializer(_Initializer):
+class Initializer(_Initializer):
   def __init__(self, module, per_channel=True, init_bias=True):
     super().__init__(module, per_channel)
     self.init_bias = init_bias
 
   def initialize(self, x):
     # init weight
+    print ("INITIALIZE WEIGHT!!!!!!")
     nn.init.kaiming_normal_(self.weight.data, a=0, mode='fan_in')
     y = self.module(x)
     sigma = self.std(y, per_channel=False)

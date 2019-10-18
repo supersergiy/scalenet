@@ -8,15 +8,18 @@ import random
 
 from .model import Model
 from .tools import dict_to_str
-from .initialization import KyleInitializer
+from .initialization import Initializer
+
+from pdb import set_trace as st
 
 class Sequence(Model):
-    def initc(self, m, mult, kyleinit=False):
-        if kyleinit:
-           m = KyleInitializer(m, per_channel=True, init_bias=True)
-        else:
+    def initc(self, m, mult):
+        nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+        m.bias.data[...] = 0
+        if True:
             m.weight.data *= mult
-            m.bias.data[...] = 0
+
+        return m
 
     def validate_arch_desc(self, arch_desc):
         #TODO
@@ -27,6 +30,9 @@ class Sequence(Model):
         self.name = dict_to_str(arch_desc)
         self.params = self.parse_arch_desc(arch_desc)
         self.construct_layers(self.params)
+        #self.do_dynamic_init = torch.nn.Parameter(torch.zeros(2, requires_grad=False))
+        self.init_bias = True
+        self.per_channel = True
 
     def parse_arch_desc(self, arch_desc):
         self.validate_arch_desc(arch_desc)
@@ -38,8 +44,7 @@ class Sequence(Model):
             },
             'conv': {
                 'k': 7,
-                'init_mult': np.sqrt(6),
-                'kyleinit': False
+                'init_mult': np.sqrt(6)
             },
             'act': {
                 'constructor': nn.LeakyReLU
@@ -61,7 +66,6 @@ class Sequence(Model):
         skips = params['structure']['skips']
 
         init_mult = params['conv']['init_mult']
-        kyleinit = params['conv']['kyleinit']
         k = params['conv']['k']
         pad = (k - 1) // 2
 
@@ -73,7 +77,7 @@ class Sequence(Model):
 
         for i in range(len(fms) - 1):
             self.layers.append(nn.Conv2d(fms[i], fms[i + 1], k, padding=pad))
-            self.initc(self.layers[-1], init_mult, kyleinit=kyleinit)
+            self.initc(self.layers[-1], init_mult)
 
             if i != len(fms) - 2:
                 if params['flags']['use_batchnorm']:
@@ -85,9 +89,6 @@ class Sequence(Model):
         self.seq = nn.Sequential(*self.layers)
 
     def parse_conv_params(self, params, arch_desc):
-        if 'kyleinit' in arch_desc:
-            params['conv']['kyleinit'] = arch_desc['kyleinit']
-
         if 'k' in arch_desc:
             params['conv']['k'] = arch_desc['k']
 
@@ -126,6 +127,42 @@ class Sequence(Model):
                     int(s): e for (s, e) in six.iteritems(arch_desc['skips'])
             }
 
+    def expand_dims(self, x, ndim):
+        for i in range(ndim-1):
+           x = x.unsqueeze(-1)
+        return x
+
+    def mean(self, x, per_channel=False):
+        c = x.shape[1]
+        if per_channel:
+           return x.transpose(0,1).contiguous().view(c, -1).mean(1).detach()
+        else:
+           return x.mean().detach()
+
+    def std(self, x, per_channel=False):
+        c = x.shape[1]
+        if per_channel:
+           return x.detach().transpose(0,1).contiguous().view(c, -1).var(1).mean().sqrt()
+        else:
+           return x.std().detach()
+
+
+    def dynamic_initialize(self, l, x):
+        # init weight
+        print ("INITIALIZE WEIGHT!!!!!!")
+        y = l(x)
+        sigma = self.std(y, per_channel=False)
+        scale = 1.0 / sigma * np.sqrt(2.0)
+        print (scale)
+        l.weight.data *= self.expand_dims(scale, l.weight.ndimension())
+
+        # init bias
+        if l.bias is not None:
+          l.bias.data.zero_()
+        if l.bias is not None and self.init_bias:
+          y = l(x)
+          mu = self.mean(y, self.per_channel)
+          l.bias.data -= mu
 
     def forward(self, x, *kargs, **kwargs):
         #return self.seq(x)
@@ -134,6 +171,9 @@ class Sequence(Model):
         skips = self.params['structure']['skips']
         for l in self.layers:
             if isinstance(l, torch.nn.modules.conv.Conv2d):
+                '''if self.do_dynamic_init.sum():
+                    #self.dynamic_initialize(l, x)
+                    self.do_dynamic_init = torch.nn.Parameter(torch.zeros(1, requires_grad=False))'''
                 count += 1
                 if count in skip_data or str(count) in skip_data:
                     #print ('Getting {} from the skip bank'.format(torch.mean(skip_data[count])))

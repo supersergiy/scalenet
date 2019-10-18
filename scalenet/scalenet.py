@@ -3,6 +3,7 @@ import random
 import os
 import six
 import copy
+from pdb import set_trace as st
 
 import torch
 
@@ -35,7 +36,8 @@ class ScaleNet(Model):
         state = {}
         state = self.up_path(x, level_in, multimip_input, state)
         result = self.down_path(state)
-        #self.state = state
+        if 'debug' in self.params and self.params['debug']:
+            self.state = state
         return result
 
 
@@ -57,7 +59,6 @@ class ScaleNet(Model):
 
 
             level_state['input'] = x
-
             if str(level) in self.level_upmodules:
                 x = self.level_upmodules[str(level)](x, state, level)
 
@@ -98,7 +99,7 @@ class ScaleNet(Model):
                     downmodule_in = self.level_combiners[str(level)](skip, level_in, state, level)
                 level_out = self.level_downmodules[str(level)](downmodule_in, state, level)
                 if 'debug' in self.params and self.params['debug']:
-                    print ("{}: {}".format(level, torch.mean(torch.abs(level_out))))
+                    print ("{}: mean {}, max {}".format(level, torch.mean(torch.abs(level_out)), level_out.abs().max()))
             else:
                 level_out = level_in
 
