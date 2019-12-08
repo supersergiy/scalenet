@@ -12,11 +12,19 @@ from .initialization import Initializer
 
 from pdb import set_trace as st
 
+class TissueNorm():
+    def __init__(self):
+        self.normer = torch.nn.InstanceNorm1d(1)
+    def __call__(self, x):
+        mask = x != 0
+        result = x.clone()
+        result[mask] = self.normer(x[mask].unsqueeze(0)).squeeze(0)
+
 class Sequence(Model):
     def initc(self, m, mult):
-        nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+        #nn.init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
         m.bias.data[...] = 0
-        if True:
+        if False:
             m.weight.data *= mult
 
         return m
@@ -40,6 +48,8 @@ class Sequence(Model):
             'flags': {
                 "use_batchnorm": False,
                 "use_inputnorm": False,
+                "use_tissuenorm_in": False,
+                "use_tissuenorm_all": False,
                 "use_instancenorm": False
             },
             'conv': {
@@ -74,6 +84,9 @@ class Sequence(Model):
 
         if params['flags']['use_inputnorm']:
             self.layers.append(torch.nn.InstanceNorm2d(num_features=fms[0]))
+
+        if params['flags']['use_inputnorm']:
+            self.layers.append(TissueNorm(num_features=fms[0]))
 
         for i in range(len(fms) - 1):
             self.layers.append(nn.Conv2d(fms[i], fms[i + 1], k, padding=pad))

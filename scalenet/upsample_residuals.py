@@ -17,7 +17,7 @@ class UpsampleResiduals(torch.nn.Module):
         if channel_permute:
             res = res.permute(0, 3, 1, 2)
 
-        result = torch.nn.functional.interpolate(res, scale_factor=scale)
+        result = torch.nn.functional.interpolate(res, scale_factor=scale, mode='bilinear')
         result *= scale
 
         if channel_permute:

@@ -36,7 +36,7 @@ class ScaleNet(Model):
         state = {}
         state = self.up_path(x, level_in, multimip_input, state)
         result = self.down_path(state)
-        if 'debug' in self.params and self.params['debug']:
+        if True or 'debug' in self.params and self.params['debug']:
             self.state = state
         return result
 
@@ -91,8 +91,10 @@ class ScaleNet(Model):
                 level_in = downlink(prev_out)
 
             level_state['input'] = level_in
-
-            if str(level) in self.level_downmodules:
+            if level in []:
+                print ("SKIPPING LEVEL {}".format(level))
+                level_out = level_in
+            elif str(level) in self.level_downmodules:
                 if prev_out is None:
                     downmodule_in = skip
                 else:
