@@ -7,7 +7,7 @@ from pdb import set_trace as st
 
 import torch
 
-from .residuals import res_warp_img, res_warp_res, combine_residuals
+from .residuals import res_warp_img, res_warp_res, combine_residuals, downsample
 from .model import Model
 from .add import Add
 
@@ -32,10 +32,10 @@ class ScaleNet(Model):
             self.level_skiplinks[str(i)] = self.default_skiplink()
             self.level_combiners[str(i)] = self.default_combiner()
 
-    def forward(self, x, level_in=0, multimip_input=False):
+    def forward(self, x, in_field=None, level_in=0, multimip_input=False):
         state = {}
         state = self.up_path(x, level_in, multimip_input, state)
-        result = self.down_path(state)
+        result = self.down_path(state, in_field=in_field)
         if True or 'debug' in self.params and self.params['debug']:
             self.state = state
         return result
@@ -72,7 +72,7 @@ class ScaleNet(Model):
 
         return state
 
-    def down_path(self, state):
+    def down_path(self, state, in_field=None):
         state['down'] = {}
         prev_out = None
         max_level = max([int(i) for i in state['up'].keys()])
@@ -84,7 +84,13 @@ class ScaleNet(Model):
 
             skip = state['up'][str(level)]['skip']
             if prev_out is None:
-                level_in = torch.zeros((skip.shape[0], 2, skip.shape[-2], skip.shape[-1]),
+                if in_field is not None:
+                    prev_out = in_field
+                    level_in = in_field
+                    while level_in.shape[-1] > skip.shape[-1]:
+                        level_in = downsample(level_in, is_res=True)
+                else:
+                    level_in = torch.zeros((skip.shape[0], 2, skip.shape[-2], skip.shape[-1]),
                         device=skip.device)
             else:
                 downlink = self.level_downlinks[str(level)]

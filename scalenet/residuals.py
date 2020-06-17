@@ -95,14 +95,14 @@ def gridsample(source, field, padding_mode):
     return torch.nn.functional.grid_sample(source, scaled_field, mode="bilinear",
                                             padding_mode=padding_mode)
 
-def get_identity_grid(size):
+def get_identity_grid(size, device='cuda'):
     with torch.no_grad():
-        id_theta = torch.cuda.FloatTensor([[[1,0,0],[0,1,0]]]) # identity affine transform
+        id_theta = torch.FloatTensor([[[1,0,0],[0,1,0]]]).to(device) # identity affine transform
         I = torch.nn.functional.affine_grid(id_theta,torch.Size((1,1,size,size)))
         I *= (size - 1) / size # rescale the identity provided by PyTorch
         return I
 
 def gridsample_residual(source, res, padding_mode):
     size = source.size()[-1]
-    field = res + get_identity_grid(size)
+    field = res + get_identity_grid(size, device=source.device)
     return gridsample(source, field, padding_mode)
