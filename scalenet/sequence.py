@@ -46,7 +46,7 @@ class Sequence(Model):
         self.validate_arch_desc(arch_desc)
         params = {
             'flags': {
-                "use_batchnorm": False,
+                "use_batchnorm": True,
                 "use_inputnorm": False,
                 "use_tissuenorm_in": False,
                 "use_tissuenorm_all": False,
