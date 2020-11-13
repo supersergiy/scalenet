@@ -35,13 +35,13 @@ class Sequence(Model):
 
     def __init__(self, arch_desc, batchnorm=True):
         super().__init__()
+        self.batchnorm = batchnorm
         self.name = dict_to_str(arch_desc)
         self.params = self.parse_arch_desc(arch_desc)
         self.construct_layers(self.params)
         #self.do_dynamic_init = torch.nn.Parameter(torch.zeros(2, requires_grad=False))
         self.init_bias = True
         self.per_channel = True
-        self.batchnorm = batchnorm
 
     def parse_arch_desc(self, arch_desc):
         self.validate_arch_desc(arch_desc)
