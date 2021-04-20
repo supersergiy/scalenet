@@ -33,8 +33,9 @@ class Sequence(Model):
         #TODO
         return
 
-    def __init__(self, arch_desc):
+    def __init__(self, arch_desc, batchnorm=True):
         super().__init__()
+        self.batchnorm = batchnorm
         self.name = dict_to_str(arch_desc)
         self.params = self.parse_arch_desc(arch_desc)
         self.construct_layers(self.params)
@@ -46,7 +47,7 @@ class Sequence(Model):
         self.validate_arch_desc(arch_desc)
         params = {
             'flags': {
-                "use_batchnorm": False,
+                "use_batchnorm": self.batchnorm,
                 "use_inputnorm": False,
                 "use_tissuenorm_in": False,
                 "use_tissuenorm_all": False,
