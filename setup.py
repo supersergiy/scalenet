@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="scalenet",
-    version="0.0.8",
+    version="0.0.9",
     author="Sergiy Popovych",
     author_email="sergiy.popovich@gmail.com",
     description="A universal pytorch module for implementing multiscale architectures (UNet, spatial pyramid, SpyNet, res-Unet)",

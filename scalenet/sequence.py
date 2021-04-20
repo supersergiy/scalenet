@@ -33,7 +33,7 @@ class Sequence(Model):
         #TODO
         return
 
-    def __init__(self, arch_desc, batchnorm=True):
+    def __init__(self, arch_desc, batchnorm=False):
         super().__init__()
         self.batchnorm = batchnorm
         self.name = dict_to_str(arch_desc)
